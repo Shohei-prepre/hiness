@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ハイネス｜営業フォーム自動化システム 説明書</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+      background: #f4f6f9;
+      color: #2c3e50;
+      padding: 40px 20px;
+      line-height: 1.7;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* ヘッダー */
+    .header {
+      background: linear-gradient(135deg, #1F3864, #2e5fa3);
+      color: white;
+      padding: 36px 40px;
+      border-radius: 12px;
+      margin-bottom: 32px;
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
+    }
+    .header p {
+      font-size: 13px;
+      opacity: 0.8;
+    }
+
+    /* フロー図 */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: white;
+      border-radius: 10px;
+      padding: 24px 28px;
+      margin-bottom: 32px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      overflow-x: auto;
+    }
+    .flow-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 140px;
+    }
+    .flow-badge {
+      background: #1F3864;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-bottom: 6px;
+      letter-spacing: 0.05em;
+    }
+    .flow-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 4px;
+    }
+    .flow-file {
+      font-size: 10px;
+      color: #7f8c8d;
+      font-family: monospace;
+      text-align: center;
+    }
+    .flow-arrow {
+      font-size: 20px;
+      color: #bdc3c7;
+      flex-shrink: 0;
+    }
+
+    /* セクション */
+    .section {
+      background: white;
+      border-radius: 10px;
+      padding: 28px 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 2px solid #eaf0fb;
+    }
+    .step-number {
+      background: #1F3864;
+      color: white;
+      font-size: 13px;
+      font-weight: 700;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
+    }
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1F3864;
+    }
+    .section-subtitle {
+      font-size: 12px;
+      color: #7f8c8d;
+      margin-top: 2px;
+    }
+
+    /* メタ情報 */
+    .meta-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .meta-chip {
+      background: #eaf0fb;
+      color: #1F3864;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 20px;
+    }
+    .meta-chip.time { background: #fff3e0; color: #e65100; }
+    .meta-chip.output { background: #e8f5e9; color: #2e7d32; }
+
+    /* 説明テキスト */
+    .desc {
+      font-size: 14px;
+      color: #4a5568;
+      margin-bottom: 14px;
+    }
+
+    /* コードブロック */
+    pre {
+      background: #1e2a3a;
+      color: #a8d8a8;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 13px;
+      padding: 16px 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 14px 0;
+      line-height: 1.6;
+    }
+    code {
+      font-family: "Consolas", "Courier New", monospace;
+      background: #eaf0fb;
+      color: #1F3864;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    /* テーブル */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 14px 0;
+    }
+    th {
+      background: #1F3864;
+      color: white;
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid #eaf0fb;
+      color: #4a5568;
+    }
+    tr:nth-child(even) td { background: #f7f9fc; }
+
+    /* ステータスバッジ */
+    .badge-found    { background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-notfound { background: #fce4ec; color: #c62828; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-skip     { background: #f5f5f5; color: #757575; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+
+    /* 警告ボックス */
+    .alert {
+      background: #fff8e1;
+      border-left: 4px solid #f9a825;
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      font-size: 13px;
+      color: #5d4037;
+      margin: 14px 0;
+    }
+
+    /* リスト */
+    ul.list {
+      padding-left: 20px;
+      font-size: 14px;
+      color: #4a5568;
+    }
+    ul.list li { margin-bottom: 5px; }
+
+    /* スケール表 */
+    .scale-table td:last-child {
+      font-weight: 600;
+      color: #1F3864;
+    }
+
+    /* config セクション */
+    .config-note {
+      background: #e8f0fe;
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 13px;
+      color: #1a237e;
+      margin-bottom: 14px;
+    }
+
+    /* ファイル構成 */
+    .file-tree {
+      background: #1e2a3a;
+      color: #cdd9e5;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 13px;
+      padding: 20px 24px;
+      border-radius: 8px;
+      line-height: 1.9;
+    }
+    .file-tree .comment { color: #6a9955; }
+    .file-tree .highlight { color: #a8d8a8; font-weight: bold; }
+
+    /* フッター */
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: #aab;
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid #e0e6f0;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ヘッダー -->
+  <div class="header">
+    <h1>ハイネス｜営業フォーム自動化システム</h1>
+    <p>求人広告代理店向け　フォーム営業 自動化パイプライン　説明書</p>
+  </div>
+
+  <!-- フロー図 -->
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-badge">STEP 1</div>
+      <div class="flow-label">リサーチ</div>
+      <div class="flow-file">raw_companies.csv</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-badge">STEP 2</div>
+      <div class="flow-label">フォーム発見</div>
+      <div class="flow-file">enriched_companies.csv</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-badge">STEP 3</div>
+      <div class="flow-label">試運転</div>
+      <div class="flow-file">safe.csv</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-badge">STEP 4</div>
+      <div class="flow-label">本番送信</div>
+      <div class="flow-file">sent_log.csv</div>
+    </div>
+  </div>
+
+  <!-- 事前準備 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-number" style="background:#455a64;">準備</div>
+      <div>
+        <div class="section-title">事前インストール</div>
+        <div class="section-subtitle">初回のみ実行</div>
+      </div>
+    </div>
+    <pre>cd C:\Users\S20488\Downloads\ハイネス
+pip install -r requirements.txt
+playwright install chromium</pre>
+  </div>
+
+  <!-- STEP1 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-number">S1</div>
+      <div>
+        <div class="section-title">リサーチ　―　会社リスト収集</div>
+        <div class="section-subtitle">agent1_research.py</div>
+      </div>
+    </div>
+    <div class="meta-row">
+      <span class="meta-chip time">所要時間：約6〜8分</span>
+      <span class="meta-chip output">出力：raw_companies.csv</span>
+    </div>
+    <p class="desc">求人広告代理店の「会社名＋公式URL」を複数ソースから収集する。</p>
+    <p class="desc"><strong>収集ソース：</strong></p>
+    <ul class="list">
+      <li>JESRA（日本人材紹介事業協会）会員 322社　※プロフィールページからURL付きで取得</li>
+      <li>ARNA（全国求人情報協会）リンク集</li>
+      <li>PRtimes 人材紹介キーワード</li>
+    </ul>
+    <pre>python agent1_research.py</pre>
+    <p class="desc" style="margin-top:4px;">または <code>run_agent1.bat</code> をダブルクリック</p>
+    <table>
+      <tr><th>列名</th><th>内容</th></tr>
+      <tr><td><code>company_name</code></td><td>会社名</td></tr>
+      <tr><td><code>official_url</code></td><td>公式URL</td></tr>
+      <tr><td><code>source</code></td><td>取得元（JESRA / ARNA / PRtimes）</td></tr>
+    </table>
+  </div>
+
+  <!-- STEP2 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-number">S2</div>
+      <div>
+        <div class="section-title">フォーム発見　―　問い合わせフォームURL取得</div>
+        <div class="section-subtitle">agent2_enrich.py</div>
+      </div>
+    </div>
+    <div class="meta-row">
+      <span class="meta-chip time">所要時間：約30〜40分</span>
+      <span class="meta-chip output">出力：enriched_companies.csv</span>
+    </div>
+    <p class="desc">公式URLから問い合わせフォームのURLを自動で探し出す。</p>
+    <p class="desc"><strong>探索ロジック：</strong></p>
+    <ul class="list">
+      <li>トップページの「お問い合わせ」リンクを優先して探す</li>
+      <li>なければ <code>/contact/</code> <code>/inquiry/</code> <code>/お問い合わせ/</code> など9パターンを総当たり</li>
+      <li><code>&lt;form&gt;</code> + <code>&lt;textarea&gt;</code> または <code>&lt;input&gt;</code> があればフォームと判定</li>
+      <li>安全チェック：ドメイン一致 / 会社名検出 / 採用・サポートページ除外</li>
+    </ul>
+    <pre>python agent2_enrich.py</pre>
+    <table>
+      <tr><th>列名</th><th>内容</th></tr>
+      <tr><td><code>company_name</code></td><td>会社名</td></tr>
+      <tr><td><code>official_url</code></td><td>公式URL</td></tr>
+      <tr><td><code>form_url</code></td><td>フォームURL</td></tr>
+      <tr><td><code>status</code></td><td><span class="badge-found">found</span> / <span class="badge-notfound">not_found</span> / <span class="badge-skip">skip</span></td></tr>
+      <tr><td><code>source</code></td><td>取得元</td></tr>
+    </table>
+    <div class="alert">
+      <strong>status = found</strong> の会社のみSTEP3に進む（目安：100〜150社）
+    </div>
+  </div>
+
+  <!-- STEP3 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-number">S3</div>
+      <div>
+        <div class="section-title">試運転　―　Playwright dry-run</div>
+        <div class="section-subtitle">agent3_dryrun.py</div>
+      </div>
+    </div>
+    <div class="meta-row">
+      <span class="meta-chip time">所要時間：約20〜30分</span>
+      <span class="meta-chip output">出力：safe.csv</span>
+    </div>
+    <p class="desc">Playwrightでフォームを自動入力し、<strong>送信ボタン手前で止まる。</strong>入力が成功した会社だけをsafe.csvに記録する。</p>
+    <p class="desc"><strong>対応フォーム種別：</strong></p>
+    <ul class="list">
+      <li>Contact Form 7（WordPress）</li>
+      <li>WPForms</li>
+      <li>MW WP Form</li>
+      <li>汎用フォーム（上記以外）</li>
+    </ul>
+    <p class="desc" style="margin-top:12px;"><strong>除外（送信しない）：</strong></p>
+    <ul class="list">
+      <li>toC企業（個人向けサービス）</li>
+      <li>公的機関・大企業</li>
+      <li>採用・サポートページ</li>
+      <li>第三者プラットフォーム（form-mailer.jp等）</li>
+    </ul>
+    <pre>python agent3_dryrun.py</pre>
+  </div>
+
+  <!-- STEP4 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-number">S4</div>
+      <div>
+        <div class="section-title">本番送信　―　フォーム送信実行</div>
+        <div class="section-subtitle">agent4_submit.py</div>
+      </div>
+    </div>
+    <div class="meta-row">
+      <span class="meta-chip output">出力：sent_log.csv</span>
+    </div>
+    <div class="alert">
+      <strong>実行前に必ず config.py の自社情報・メッセージ本文を設定すること</strong>
+    </div>
+    <p class="desc">safe.csv の会社に対して実際にフォームを送信する。</p>
+    <pre>python agent4_submit.py</pre>
+    <table>
+      <tr><th>列名</th><th>内容</th></tr>
+      <tr><td><code>company_name</code></td><td>会社名</td></tr>
+      <tr><td><code>form_url</code></td><td>送信したフォームURL</td></tr>
+      <tr><td><code>result</code></td><td>success / failed</td></tr>
+      <tr><td><code>timestamp</code></td><td>送信日時</td></tr>
+      <tr><td><code>error</code></td><td>失敗時のエラー内容</td></tr>
+    </table>
+  </div>
+
+  <!-- config設定 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-number" style="background:#455a64;">設定</div>
+      <div>
+        <div class="section-title">config.py　―　自社情報・メッセージの入力</div>
+        <div class="section-subtitle">STEP4実行前に必須</div>
+      </div>
+    </div>
+    <div class="config-note">
+      config.py を開いて以下の項目を実際の値に書き換えてください。
+    </div>
+    <pre>SENDER_INFO = {
+    "company":   "（自社名）",
+    "name":      "（担当者名）",
+    "name_kana": "（ふりがな）",
+    "email":     "（メールアドレス）",
+    "phone":     "（電話番号）",
+    "title":     "（役職）",
+    "url":       "（自社URL）",
+}
+
+MESSAGE_TEMPLATE = """
+（営業メッセージ本文をここに記入）
+"""</pre>
+  </div>
+
+  <!-- Excel出力 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-number" style="background:#455a64;">出力</div>
+      <div>
+        <div class="section-title">Excelに出力する</div>
+        <div class="section-subtitle">export_excel.py</div>
+      </div>
+    </div>
+    <pre># STEP1完了後
+python export_excel.py --input data/raw_companies.csv --output data/ハイネス_リスト_STEP1.xlsx
+
+# STEP2完了後
+python export_excel.py --input data/enriched_companies.csv --output data/ハイネス_リスト_STEP2.xlsx
+
+# STEP3完了後（最終送信リスト）
+python export_excel.py --input data/safe.csv --output data/ハイネス_送信リスト.xlsx</pre>
+  </div>
+
+  <!-- スケール感 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-number" style="background:#455a64;">目安</div>
+      <div>
+        <div class="section-title">スケール感（求人広告代理店の場合）</div>
+      </div>
+    </div>
+    <table class="scale-table">
+      <tr><th>フェーズ</th><th>件数目安</th></tr>
+      <tr><td>STEP1　収集</td><td>約270社</td></tr>
+      <tr><td>STEP2　フォーム発見</td><td>約100〜150社</td></tr>
+      <tr><td>STEP3　dry-run通過</td><td>約50〜100社</td></tr>
+      <tr><td>STEP4　送信成功</td><td>約30〜40社</td></tr>
+      <tr><td>アポ獲得</td><td>1〜3社（率1%前後）</td></tr>
+    </table>
+  </div>
+
+  <!-- ファイル構成 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-number" style="background:#455a64;">構成</div>
+      <div>
+        <div class="section-title">ファイル構成</div>
+      </div>
+    </div>
+    <div class="file-tree">
+ハイネス/<br>
+├── <span class="highlight">説明書.html</span>          <span class="comment">← この資料</span><br>
+├── <span class="highlight">config.py</span>             <span class="comment">← 自社情報・メッセージ（要設定）</span><br>
+├── requirements.txt      <span class="comment">← 必要パッケージ</span><br>
+├── <span class="highlight">agent1_research.py</span>   <span class="comment">← STEP1</span><br>
+├── <span class="highlight">agent2_enrich.py</span>     <span class="comment">← STEP2</span><br>
+├── agent3_dryrun.py      <span class="comment">← STEP3（作成中）</span><br>
+├── agent4_submit.py      <span class="comment">← STEP4（作成中）</span><br>
+├── export_excel.py       <span class="comment">← Excel出力</span><br>
+├── run_agent1.bat        <span class="comment">← STEP1 ダブルクリック実行</span><br>
+├── adapters/             <span class="comment">← フォーム種別ごとの入力ロジック</span><br>
+└── data/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;├── raw_companies.csv        <span class="comment">← STEP1アウトプット</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;├── enriched_companies.csv   <span class="comment">← STEP2アウトプット</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;├── safe.csv                 <span class="comment">← STEP3アウトプット</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;└── sent_log.csv             <span class="comment">← STEP4アウトプット</span>
+    </div>
+  </div>
+
+  <div class="footer">ハイネス 営業フォーム自動化システム　説明書</div>
+
+</div>
+</body>
+</html>

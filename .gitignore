@@ -1,0 +1,16 @@
+# データファイル（個人情報・スクレイピング結果）
+data/*.csv
+data/*.xlsx
+data/*.pdf
+data/_*.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# システム
+.DS_Store
+Thumbs.db
