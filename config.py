@@ -4,24 +4,27 @@
 """
 
 # ────────────────────────────────
-# 自社情報（後で実際の値に置き換える）
+# 自社情報
+# GitHub Actions では Secrets から自動注入される
+# ローカル実行時は直接ここに記入する
 # ────────────────────────────────
+import os
+
 SENDER_INFO = {
-    "company":   "{{YOUR_COMPANY_NAME}}",
-    "name":      "{{YOUR_NAME}}",
-    "name_kana": "{{YOUR_NAME_KANA}}",   # ふりがな（ひらがな）
-    "email":     "{{YOUR_EMAIL}}",
-    "phone":     "{{YOUR_PHONE}}",
-    "title":     "{{YOUR_TITLE}}",
-    "url":       "{{YOUR_COMPANY_URL}}",
+    "company":   os.getenv("SENDER_COMPANY",   "{{YOUR_COMPANY_NAME}}"),
+    "name":      os.getenv("SENDER_NAME",      "{{YOUR_NAME}}"),
+    "name_kana": os.getenv("SENDER_NAME_KANA", "{{YOUR_NAME_KANA}}"),
+    "email":     os.getenv("SENDER_EMAIL",     "{{YOUR_EMAIL}}"),
+    "phone":     os.getenv("SENDER_PHONE",     "{{YOUR_PHONE}}"),
+    "title":     os.getenv("SENDER_TITLE",     "{{YOUR_TITLE}}"),
+    "url":       os.getenv("SENDER_URL",       "{{YOUR_COMPANY_URL}}"),
 }
 
 # ────────────────────────────────
-# 営業メッセージ本文（後で記入）
+# 営業メッセージ本文
+# GitHub Actions では SENDER_MESSAGE_BODY Secret から注入される
 # ────────────────────────────────
-MESSAGE_TEMPLATE = """\
-{{MESSAGE_BODY}}
-"""
+MESSAGE_TEMPLATE = os.getenv("SENDER_MESSAGE_BODY", "{{MESSAGE_BODY}}")
 
 # ────────────────────────────────
 # HTTPリクエスト設定

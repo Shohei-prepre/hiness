@@ -1,0 +1,88 @@
+name: 営業フォーム自動化パイプライン
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: '実行するステップを選んでください'
+        required: true
+        type: choice
+        default: 'STEP1のみ（リサーチ）'
+        options:
+          - 'STEP1のみ（リサーチ）'
+          - 'STEP1+2（リサーチ＋フォーム発見）'
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      # ① コードを取得
+      - name: コードをチェックアウト
+        uses: actions/checkout@v4
+
+      # ② Python セットアップ
+      - name: Python 3.12 セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # ③ 依存パッケージをインストール
+      - name: 依存パッケージをインストール
+        run: pip install -r requirements.txt
+
+      # ④ Playwright ブラウザをインストール（STEP3/4用）
+      - name: Playwright Chromium をインストール
+        run: playwright install chromium --with-deps
+
+      # ⑤ data/ フォルダを作成（gitignore対象のため）
+      - name: data フォルダを作成
+        run: mkdir -p data
+
+      # ⑥ STEP1 リサーチ（常に実行）
+      - name: STEP1 リサーチ（会社リスト収集）
+        env:
+          SENDER_COMPANY:      ${{ secrets.SENDER_COMPANY }}
+          SENDER_NAME:         ${{ secrets.SENDER_NAME }}
+          SENDER_NAME_KANA:    ${{ secrets.SENDER_NAME_KANA }}
+          SENDER_EMAIL:        ${{ secrets.SENDER_EMAIL }}
+          SENDER_PHONE:        ${{ secrets.SENDER_PHONE }}
+          SENDER_TITLE:        ${{ secrets.SENDER_TITLE }}
+          SENDER_URL:          ${{ secrets.SENDER_URL }}
+          SENDER_MESSAGE_BODY: ${{ secrets.SENDER_MESSAGE_BODY }}
+        run: python agent1_research.py
+
+      # ⑦ STEP2 フォーム発見（選択時のみ）
+      - name: STEP2 フォーム発見
+        if: contains(inputs.step, 'STEP1+2')
+        env:
+          SENDER_COMPANY:      ${{ secrets.SENDER_COMPANY }}
+          SENDER_NAME:         ${{ secrets.SENDER_NAME }}
+          SENDER_NAME_KANA:    ${{ secrets.SENDER_NAME_KANA }}
+          SENDER_EMAIL:        ${{ secrets.SENDER_EMAIL }}
+          SENDER_PHONE:        ${{ secrets.SENDER_PHONE }}
+          SENDER_TITLE:        ${{ secrets.SENDER_TITLE }}
+          SENDER_URL:          ${{ secrets.SENDER_URL }}
+          SENDER_MESSAGE_BODY: ${{ secrets.SENDER_MESSAGE_BODY }}
+        run: python agent2_enrich.py
+
+      # ⑧ Excel に変換
+      - name: Excel に変換
+        run: |
+          if [ -f data/enriched_companies.csv ]; then
+            python export_excel.py --input data/enriched_companies.csv --output data/営業リスト.xlsx
+          else
+            python export_excel.py --input data/raw_companies.csv --output data/営業リスト.xlsx
+          fi
+
+      # ⑨ 結果ファイルをアーティファクトとしてアップロード
+      - name: 結果をアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: 営業リスト-${{ github.run_number }}
+          path: |
+            data/*.csv
+            data/*.xlsx
+          retention-days: 30
