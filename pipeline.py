@@ -13,7 +13,7 @@ def step1(industry: str):
     print("STEP1: リサーチ開始")
     print("="*50)
     import agent1_research
-    agent1_research.run()
+    agent1_research.run(industry)
 
 
 def step2(industry: str):

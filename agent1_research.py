@@ -1,16 +1,19 @@
 """
 エージェント①：リサーチエージェント
-求人広告代理店の「会社名 + 公式URL」を複数ソースから収集し
-data/raw_companies.csv に保存する
+会社名 + 公式URL を複数ソースから収集し data/raw_companies.csv に保存する
 
-実行: python agent1_research.py
+実行例:
+  python agent1_research.py                           # 求人広告代理店（デフォルト）
+  python agent1_research.py --industry 不動産仲介
+  python agent1_research.py --industry 税理士事務所
 """
 
 import os
 import re
 import time
 import logging
-from urllib.parse import urljoin, urlparse
+import argparse
+from urllib.parse import urljoin, urlparse, quote
 
 import requests
 from bs4 import BeautifulSoup
@@ -29,7 +32,6 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
-
 
 # ────────────────────────────────
 # 共通ユーティリティ
@@ -55,7 +57,7 @@ def get(url: str) -> requests.Response | None:
 
 
 def extract_root_domain(url: str) -> str:
-    """URLからrootドメインを返す（例: https://foo.co.jp/bar → foo.co.jp）"""
+    """URLからrootドメインを返す"""
     try:
         return urlparse(url).netloc.lower()
     except Exception:
@@ -71,14 +73,11 @@ def is_external_url(href: str, own_domains: list[str]) -> bool:
 
 
 # ────────────────────────────────
-# ソース① 全国求人情報協会（ARNA）
+# 専用ソース（求人広告代理店のみ）
 # ────────────────────────────────
 
 def scrape_arna() -> list[dict]:
-    """
-    全国求人情報協会のリンクページから会員各社のURLを抽出する
-    https://www.zenkyukyo.or.jp/link/ に会員社へのリンクが掲載されている
-    """
+    """全国求人情報協会のリンクページから会員各社のURLを抽出する"""
     cfg = RESEARCH_SOURCES["arna"]
     if not cfg["enabled"]:
         return []
@@ -102,7 +101,6 @@ def scrape_arna() -> list[dict]:
             continue
         if not name or len(name) < 2:
             continue
-        # ナビゲーション等の無関係リンクを除外
         if any(skip in href for skip in ["facebook", "twitter", "youtube", "instagram"]):
             continue
 
@@ -115,10 +113,6 @@ def scrape_arna() -> list[dict]:
     logger.info(f"[ARNA] {len(results)} 件取得")
     return results
 
-
-# ────────────────────────────────
-# ソース② 日本人材紹介事業協会（JESRA）
-# ────────────────────────────────
 
 def _fetch_jesra_official_url(profile_path: str) -> str:
     """JESRAプロフィールページから会社の公式URLを取得する"""
@@ -135,18 +129,13 @@ def _fetch_jesra_official_url(profile_path: str) -> str:
 
 
 def scrape_jesra_search() -> list[dict]:
-    """
-    JESRAの会員企業検索ページ（322社・17ページ）をページネーションし
-    各社のプロフィールページから公式URLを取得する
-    https://www.jesra.or.jp/search/?key2=0&page=N&prefcode=0
-    """
+    """JESRAの会員企業検索ページ（322社・17ページ）をページネーションして取得する"""
     cfg = RESEARCH_SOURCES["jesra"]
     if not cfg["enabled"]:
         return []
 
     logger.info("[JESRA] 会員検索ページ スクレイピング開始（322社・17ページ）")
     results = []
-    base = "https://www.jesra.or.jp"
 
     for page in range(1, cfg["max_pages"] + 1):
         url = f"{cfg['search_url']}?key2=0&page={page}&prefcode=0"
@@ -158,13 +147,11 @@ def scrape_jesra_search() -> list[dict]:
 
         soup = BeautifulSoup(resp.text, "lxml")
 
-        # 会社名を取得
         name_tags = soup.select(".company-name")
         if not name_tags:
             logger.info(f"[JESRA] ページ {page} でデータなし → 終了")
             break
 
-        # 各カードのプロフィールリンク（/search/XXXX/）を取得
         profile_links = [
             a["href"] for a in soup.select(".src_btn a[href]")
             if a["href"].startswith("/search/")
@@ -175,7 +162,6 @@ def scrape_jesra_search() -> list[dict]:
             if not name:
                 continue
 
-            # プロフィールページから公式URLを取得
             official_url = ""
             if i < len(profile_links):
                 time.sleep(REQUEST_DELAY * 0.5)
@@ -195,10 +181,7 @@ def scrape_jesra_search() -> list[dict]:
 
 
 def scrape_jesra_pdf() -> list[dict]:
-    """
-    JESRA会員名簿PDF（253社）から会社名だけ抽出する
-    URLはないため official_url は空欄 → agent2でURL発見を試みる
-    """
+    """JESRA会員名簿PDF（253社）から会社名だけ抽出する"""
     cfg = RESEARCH_SOURCES["jesra"]
     if not cfg["enabled"]:
         return []
@@ -211,7 +194,6 @@ def scrape_jesra_pdf() -> list[dict]:
         logger.error("[JESRA-PDF] PDF取得失敗")
         return []
 
-    # 一時ファイルに保存してpdfplumberで読み込む
     tmp_path = os.path.join(DATA_DIR, "_jesra_tmp.pdf")
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(tmp_path, "wb") as f:
@@ -224,19 +206,15 @@ def scrape_jesra_pdf() -> list[dict]:
                 text = page.extract_text() or ""
                 for line in text.splitlines():
                     line = line.strip()
-                    # 会社名の判定：法人格キーワードを含む行
                     if not re.search(r"株式会社|有限会社|合同会社|㈱|（株）|LLC|Inc\.|Corp\.", line):
                         continue
-                    # 行頭の番号・記号を除去
                     name = re.sub(r"^\d+[\s\.\)）]+", "", line).strip()
-                    # タブや空白以降（電話番号・住所等）を除去
                     name = re.split(r"[\t　]{2,}|\s{3,}", name)[0].strip()
-                    # 余分な記号を除去
                     name = re.sub(r"[※◆●■▶].*$", "", name).strip()
                     if name and 3 < len(name) < 50:
                         results.append({
                             "company_name": name,
-                            "official_url": "",   # agent2で発見する
+                            "official_url": "",
                             "source": "JESRA-PDF",
                         })
     finally:
@@ -246,104 +224,6 @@ def scrape_jesra_pdf() -> list[dict]:
     logger.info(f"[JESRA-PDF] {len(results)} 件取得")
     return results
 
-
-# ────────────────────────────────
-# ソース③ PRtimes（人材紹介キーワード）
-# ────────────────────────────────
-
-def scrape_prtimes() -> list[dict]:
-    """
-    PRtimes の人材紹介会社キーワードページから
-    プレスリリース本文の「URL：https://xxx」パターンで公式URLを抽出する
-    """
-    cfg = RESEARCH_SOURCES["prtimes"]
-    if not cfg["enabled"]:
-        return []
-
-    logger.info("[PRtimes] 開始（人材紹介会社キーワード）")
-
-    # 「URL：https://xxx」「公式サイト：https://xxx」パターン
-    URL_PATTERN = re.compile(
-        r"(?:URL|公式サイト|ウェブサイト|ホームページ|HP|公式HP)"
-        r"[　 ：:\s]*(https?://[^\s　」\）\)\"\'<>。、]+)",
-        re.IGNORECASE,
-    )
-
-    results = []
-    base_url = cfg["base_url"]
-    topic_url = cfg["topic_url"]
-
-    for page in range(1, cfg["max_pages"] + 1):
-        # PRtimesのページネーション形式: /page/N/ または ?page=N どちらも試みる
-        list_url = f"{topic_url}/page/{page}/" if page > 1 else topic_url
-        logger.info(f"[PRtimes] トピックページ {page}/{cfg['max_pages']}: {list_url}")
-
-        resp = get(list_url)
-        if not resp:
-            continue
-
-        soup = BeautifulSoup(resp.text, "lxml")
-
-        # プレスリリース個別ページへのリンクを収集
-        pr_links = []
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
-            # PRtimesのリリースURLは /main/html/rd/ を含む
-            if "/main/html/rd/" in href or "/story/" in href:
-                full = urljoin(base_url, href)
-                if full not in pr_links:
-                    pr_links.append(full)
-
-        logger.info(f"[PRtimes] {len(pr_links)} 件のリリースを発見")
-        if not pr_links:
-            logger.info(f"[PRtimes] ページ {page} でリリースなし → 終了")
-            break
-
-        for pr_url in tqdm(pr_links, desc=f"PRtimes p{page}", leave=False):
-            time.sleep(REQUEST_DELAY)
-            pr_resp = get(pr_url)
-            if not pr_resp:
-                continue
-
-            pr_soup = BeautifulSoup(pr_resp.text, "lxml")
-
-            # 発信元会社名を複数セレクタで試みる
-            company_name = ""
-            for sel in [
-                ".company-name",
-                ".press-corp-name",
-                "[class*='companyName']",
-                "[class*='company_name']",
-                "h2.company",
-            ]:
-                tag = pr_soup.select_one(sel)
-                if tag:
-                    company_name = tag.get_text(strip=True)
-                    break
-
-            # 本文テキストからURLパターンを抽出（1リリース1URLのみ）
-            body_text = pr_soup.get_text(" ")
-            matches = URL_PATTERN.findall(body_text)
-
-            for found_url in matches:
-                found_url = found_url.rstrip("。、．,」）)")
-                if found_url and company_name:
-                    results.append({
-                        "company_name": company_name,
-                        "official_url": found_url.rstrip("/") + "/",
-                        "source": "PRtimes",
-                    })
-                    break
-
-        time.sleep(REQUEST_DELAY * 2)
-
-    logger.info(f"[PRtimes] {len(results)} 件取得")
-    return results
-
-
-# ────────────────────────────────
-# ソース④ マイナビパートナー
-# ────────────────────────────────
 
 def scrape_mynavi_partner() -> list[dict]:
     """マイナビパートナー代理店一覧から会社名とURLを抽出する"""
@@ -380,10 +260,6 @@ def scrape_mynavi_partner() -> list[dict]:
     logger.info(f"[マイナビ] {len(results)} 件取得")
     return results
 
-
-# ────────────────────────────────
-# ソース⑤ Indeed公認パートナー
-# ────────────────────────────────
 
 def scrape_indeed_partner() -> list[dict]:
     """Indeed公認パートナー一覧から会社名とURLを抽出する"""
@@ -422,18 +298,157 @@ def scrape_indeed_partner() -> list[dict]:
 
 
 # ────────────────────────────────
+# 汎用ソース（全業界対応）
+# ────────────────────────────────
+
+def scrape_prtimes_keyword(industry: str, max_pages: int = 5) -> list[dict]:
+    """
+    PRtimes のキーワードトピックページから会社名と公式URLを抽出する
+    任意の業界キーワードに対応する汎用スクレイパー
+    """
+    base_url   = "https://prtimes.jp"
+    topic_url  = f"https://prtimes.jp/topics/keywords/{quote(industry)}"
+
+    URL_PATTERN = re.compile(
+        r"(?:URL|公式サイト|ウェブサイト|ホームページ|HP|公式HP)"
+        r"[　 ：:\s]*(https?://[^\s　」\）\)\"\'<>。、]+)",
+        re.IGNORECASE,
+    )
+
+    logger.info(f"[PRtimes] キーワード「{industry}」で検索開始")
+    results = []
+
+    for page in range(1, max_pages + 1):
+        list_url = f"{topic_url}/page/{page}/" if page > 1 else topic_url
+        logger.info(f"[PRtimes] ページ {page}/{max_pages}: {list_url}")
+
+        resp = get(list_url)
+        if not resp:
+            continue
+
+        soup = BeautifulSoup(resp.text, "lxml")
+
+        pr_links = []
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if "/main/html/rd/" in href or "/story/" in href:
+                full = urljoin(base_url, href)
+                if full not in pr_links:
+                    pr_links.append(full)
+
+        if not pr_links:
+            logger.info(f"[PRtimes] ページ {page} でリリースなし → 終了")
+            break
+
+        logger.info(f"[PRtimes] {len(pr_links)} 件のリリースを発見")
+
+        for pr_url in tqdm(pr_links, desc=f"PRtimes p{page}", leave=False):
+            time.sleep(REQUEST_DELAY)
+            pr_resp = get(pr_url)
+            if not pr_resp:
+                continue
+
+            pr_soup = BeautifulSoup(pr_resp.text, "lxml")
+
+            company_name = ""
+            for sel in [
+                ".company-name", ".press-corp-name",
+                "[class*='companyName']", "[class*='company_name']",
+            ]:
+                tag = pr_soup.select_one(sel)
+                if tag:
+                    company_name = tag.get_text(strip=True)
+                    break
+
+            body_text = pr_soup.get_text(" ")
+            matches = URL_PATTERN.findall(body_text)
+
+            for found_url in matches:
+                found_url = found_url.rstrip("。、．,」）)")
+                if found_url and company_name:
+                    results.append({
+                        "company_name": company_name,
+                        "official_url": found_url.rstrip("/") + "/",
+                        "source": f"PRtimes/{industry}",
+                    })
+                    break
+
+        time.sleep(REQUEST_DELAY * 2)
+
+    logger.info(f"[PRtimes] {len(results)} 件取得")
+    return results
+
+
+def scrape_google_search(industry: str, max_pages: int = 5) -> list[dict]:
+    """
+    Google検索「{industry} 会社 一覧」から会社名と公式URLを抽出する汎用スクレイパー
+    ※ Googleのbot対策により取得件数は限られる場合がある
+    """
+    query   = f"{industry} 会社 一覧"
+    results = []
+
+    CORP_PATTERN = re.compile(r"株式会社|有限会社|合同会社|㈱|（株）")
+
+    logger.info(f"[Google] キーワード「{query}」で検索開始")
+
+    for page in range(max_pages):
+        start = page * 10
+        url   = f"https://www.google.co.jp/search?q={quote(query)}&start={start}&hl=ja"
+        resp  = get(url)
+        if not resp:
+            break
+
+        soup = BeautifulSoup(resp.text, "lxml")
+
+        # 検索結果のタイトルとURLを取得
+        for g in soup.select("div.g"):
+            title_tag = g.select_one("h3")
+            link_tag  = g.select_one("a[href]")
+            if not title_tag or not link_tag:
+                continue
+
+            title = title_tag.get_text(strip=True)
+            href  = link_tag["href"]
+
+            # 会社名らしいタイトル（法人格を含む）
+            if not CORP_PATTERN.search(title):
+                continue
+            if not href.startswith("http"):
+                continue
+            # Google・Wikipedia等を除外
+            if any(x in href for x in ["google.", "wikipedia.", "wikidata.", "facebook.", "twitter."]):
+                continue
+
+            # タイトルから会社名を抽出
+            name = re.sub(r"[｜|｜\-–—].*$", "", title).strip()
+            name = re.sub(r"\s*(公式|会社概要|トップ|ホーム).*$", "", name).strip()
+
+            if name and len(name) >= 4:
+                results.append({
+                    "company_name": name,
+                    "official_url": href.rstrip("/") + "/",
+                    "source": f"Google/{industry}",
+                })
+
+        logger.info(f"[Google] ページ {page+1}: 累計 {len(results)} 件")
+        time.sleep(REQUEST_DELAY * 3)  # Googleへの負荷軽減
+
+    logger.info(f"[Google] {len(results)} 件取得")
+    return results
+
+
+# ────────────────────────────────
 # 重複排除・メイン処理
 # ────────────────────────────────
 
 def deduplicate(records: list[dict]) -> list[dict]:
-    """rootドメインが同じものを重複とみなし先着1件だけ残す。URL空欄は別途保持"""
+    """rootドメインが同じものを重複とみなし先着1件だけ残す"""
     seen_domains: set[str] = set()
     unique: list[dict] = []
 
     for rec in records:
         url = rec["official_url"]
         if not url:
-            # URLなし（JESRA-PDF）はそのまま追加（agent2でURL発見）
             unique.append(rec)
             continue
         domain = extract_root_domain(url)
@@ -444,20 +459,37 @@ def deduplicate(records: list[dict]) -> list[dict]:
     return unique
 
 
-def run() -> None:
-    """全ソースを順番に実行し、raw_companies.csv に保存する"""
+def run(industry: str = "求人広告代理店") -> None:
+    """
+    全ソースを業界に応じて切り替えて実行し、raw_companies.csv に保存する
+
+    求人広告代理店: 専用ソース（ARNA/JESRA/マイナビ/Indeed）+ PRtimes
+    その他の業界:   PRtimes キーワード検索 + Google 検索
+    """
     os.makedirs(DATA_DIR, exist_ok=True)
 
     all_records: list[dict] = []
 
-    scrapers = [
-        scrape_arna,
-        scrape_jesra_search,
-        scrape_jesra_pdf,
-        scrape_prtimes,
-        scrape_mynavi_partner,
-        scrape_indeed_partner,
-    ]
+    RECRUITMENT_INDUSTRY = "求人広告代理店"
+
+    if industry == RECRUITMENT_INDUSTRY:
+        # 専用スクレイパーを使用
+        logger.info(f"[リサーチ] 業界: {industry}（専用ソース使用）")
+        scrapers = [
+            scrape_arna,
+            scrape_jesra_search,
+            scrape_jesra_pdf,
+            lambda: scrape_prtimes_keyword("人材紹介会社"),
+            scrape_mynavi_partner,
+            scrape_indeed_partner,
+        ]
+    else:
+        # 汎用スクレイパーを使用
+        logger.info(f"[リサーチ] 業界: {industry}（汎用ソース使用）")
+        scrapers = [
+            lambda: scrape_prtimes_keyword(industry),
+            lambda: scrape_google_search(industry),
+        ]
 
     for scraper in scrapers:
         try:
@@ -479,8 +511,15 @@ def run() -> None:
 
     print(f"\n[完了] リサーチ完了: {len(unique_records)} 社 -> {RAW_CSV}")
     print(f"  URLあり : {sum(1 for r in unique_records if r['official_url'])} 社")
-    print(f"  URLなし : {sum(1 for r in unique_records if not r['official_url'])} 社 (JESRA-PDF)")
+    print(f"  URLなし : {sum(1 for r in unique_records if not r['official_url'])} 社")
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="会社リストをリサーチして raw_companies.csv に保存する")
+    parser.add_argument(
+        "--industry",
+        default="求人広告代理店",
+        help="対象業界名（例: 不動産仲介, 税理士事務所, ITコンサル）。デフォルト: 求人広告代理店",
+    )
+    args = parser.parse_args()
+    run(args.industry)
