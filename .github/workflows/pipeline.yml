@@ -7,10 +7,17 @@ on:
         description: '実行するステップを選んでください'
         required: true
         type: choice
-        default: 'STEP1のみ（リサーチ）'
+        default: 'STEP1+2（リサーチ＋フォーム発見）'
         options:
           - 'STEP1のみ（リサーチ）'
           - 'STEP1+2（リサーチ＋フォーム発見）'
+          - 'STEP1+2+2.5（Geminiパーソナライズまで）'
+          - 'STEP1+2+2.5+3（ドライランまで）'
+      industry:
+        description: '対象業界名（日本語で入力、例: 求人広告代理店）'
+        required: false
+        default: '求人広告代理店'
+        type: string
 
 jobs:
   run-pipeline:
@@ -51,10 +58,9 @@ jobs:
           SENDER_PHONE:        ${{ secrets.SENDER_PHONE }}
           SENDER_TITLE:        ${{ secrets.SENDER_TITLE }}
           SENDER_URL:          ${{ secrets.SENDER_URL }}
-          SENDER_MESSAGE_BODY: ${{ secrets.SENDER_MESSAGE_BODY }}
         run: python agent1_research.py
 
-      # ⑦ STEP2 フォーム発見（選択時のみ）
+      # ⑦ STEP2 フォーム発見
       - name: STEP2 フォーム発見
         if: contains(inputs.step, 'STEP1+2')
         env:
@@ -65,10 +71,36 @@ jobs:
           SENDER_PHONE:        ${{ secrets.SENDER_PHONE }}
           SENDER_TITLE:        ${{ secrets.SENDER_TITLE }}
           SENDER_URL:          ${{ secrets.SENDER_URL }}
-          SENDER_MESSAGE_BODY: ${{ secrets.SENDER_MESSAGE_BODY }}
         run: python agent2_enrich.py
 
-      # ⑧ Excel に変換
+      # ⑧ STEP2.5 Geminiパーソナライズ
+      - name: STEP2.5 Geminiパーソナライズ
+        if: contains(inputs.step, '2.5')
+        env:
+          GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
+          SENDER_COMPANY:      ${{ secrets.SENDER_COMPANY }}
+          SENDER_NAME:         ${{ secrets.SENDER_NAME }}
+          SENDER_NAME_KANA:    ${{ secrets.SENDER_NAME_KANA }}
+          SENDER_EMAIL:        ${{ secrets.SENDER_EMAIL }}
+          SENDER_PHONE:        ${{ secrets.SENDER_PHONE }}
+          SENDER_TITLE:        ${{ secrets.SENDER_TITLE }}
+          SENDER_URL:          ${{ secrets.SENDER_URL }}
+        run: python agent_personalize.py --industry "${{ inputs.industry }}"
+
+      # ⑨ STEP3 ドライラン
+      - name: STEP3 ドライラン
+        if: contains(inputs.step, '3')
+        env:
+          SENDER_COMPANY:      ${{ secrets.SENDER_COMPANY }}
+          SENDER_NAME:         ${{ secrets.SENDER_NAME }}
+          SENDER_NAME_KANA:    ${{ secrets.SENDER_NAME_KANA }}
+          SENDER_EMAIL:        ${{ secrets.SENDER_EMAIL }}
+          SENDER_PHONE:        ${{ secrets.SENDER_PHONE }}
+          SENDER_TITLE:        ${{ secrets.SENDER_TITLE }}
+          SENDER_URL:          ${{ secrets.SENDER_URL }}
+        run: python agent3_dryrun.py
+
+      # ⑩ Excel に変換
       - name: Excel に変換
         run: |
           if [ -f data/enriched_companies.csv ]; then
@@ -77,7 +109,7 @@ jobs:
             python export_excel.py --input data/raw_companies.csv --output data/営業リスト.xlsx
           fi
 
-      # ⑨ 結果ファイルをアーティファクトとしてアップロード
+      # ⑪ 結果ファイルをアーティファクトとしてアップロード
       - name: 結果をアップロード
         uses: actions/upload-artifact@v4
         with:
